@@ -36,6 +36,25 @@ struct SettingsView: View {
                     }
                 }
                 modelStateRow
+                LabeledContent("Model klasörü") {
+                    HStack(spacing: 8) {
+                        Text(settings.modelBaseURL.path)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        Button("Seç…", action: chooseModelFolder)
+                            .controlSize(.small)
+                    }
+                }
+            }
+
+            Section("Toplantı") {
+                Toggle("Toplantı bitince özet çıkar", isOn: $settings.summaryEnabled)
+                Toggle("Başlarken Ollama modelini bellekten çıkar", isOn: $settings.freeOllamaOnMeetingStart)
+                Text("Toplantı sırasında bellek Whisper'a kalır; özet için model sonda yeniden yüklenir.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Genel") {
@@ -45,17 +64,29 @@ struct SettingsView: View {
                     }
             }
 
-            Section("LLM Temizleme (opsiyonel)") {
-                Toggle("Ollama ile transkripti düzelt", isOn: $settings.llmCleanupEnabled)
-                TextField("Ollama modeli", text: $settings.ollamaModel)
-                    .disabled(!settings.llmCleanupEnabled)
-                Text("Yerel Ollama (localhost:11434) çalışmıyorsa ham transkript kullanılır.")
+            Section("Ollama (yerel model)") {
+                TextField("Model", text: $settings.ollamaModel)
+                Toggle("Dikte metnini modelle düzelt", isOn: $settings.llmCleanupEnabled)
+                Text("Toplantı özeti ve dikte düzeltmesi bu modeli kullanır. Ollama (localhost:11434) çalışmıyorsa dikte ham metni yazar, özet çıkmaz.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 440, height: 480)
+        .frame(width: 460, height: 640)
+    }
+
+    private func chooseModelFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = settings.modelBaseURL
+        panel.prompt = "Seç"
+        panel.message = "Whisper modellerinin indirileceği klasör"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settings.modelFolderPath = url.path
+        onModelChanged?()
     }
 
     @ViewBuilder
@@ -69,6 +100,8 @@ struct SettingsView: View {
                 Text("\(Int(progress * 100))%")
                     .monospacedDigit()
             }
+        case .preparing:
+            Label("Model bu Mac'e göre hazırlanıyor (ilk seferde birkaç dakika)…", systemImage: "gearshape.2")
         case .loading:
             Label("Model belleğe yükleniyor…", systemImage: "hourglass")
         case .ready:

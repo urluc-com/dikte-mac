@@ -21,15 +21,18 @@ enum HotkeyOption: String, CaseIterable, Identifiable {
 enum ModelSize: String, CaseIterable, Identifiable {
     case small   = "openai_whisper-small"
     case medium  = "openai_whisper-medium"
+    /// OpenAI'ın 30 Eylül 2024 tarihli large-v3-turbo modeli (WhisperKit'in hızlandırılmış derlemesi)
+    case largeV3Turbo = "openai_whisper-large-v3-v20240930_turbo"
     case largeV3 = "openai_whisper-large-v3"
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .small:   return "Small (hızlı, ~500 MB)"
-        case .medium:  return "Medium (önerilen, ~1.5 GB)"
-        case .largeV3: return "Large v3 (en doğru, ~3 GB)"
+        case .small:        return "Small (hızlı, ~500 MB)"
+        case .medium:       return "Medium (~1,5 GB)"
+        case .largeV3Turbo: return "Large v3 Turbo (önerilen, ~1,6 GB)"
+        case .largeV3:      return "Large v3 (en doğru, ~3 GB)"
         }
     }
 }
@@ -57,15 +60,33 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @AppStorage("hotkey")         var hotkeyRaw: String = HotkeyOption.rightOption.rawValue
-    @AppStorage("modelSize")      var modelRaw: String = ModelSize.medium.rawValue
+    @AppStorage("modelSize")      var modelRaw: String = ModelSize.largeV3Turbo.rawValue
     @AppStorage("language")       var languageRaw: String = LanguageOption.turkish.rawValue
     @AppStorage("llmCleanup")     var llmCleanupEnabled: Bool = false
-    @AppStorage("ollamaModel")    var ollamaModel: String = "qwen2.5"
+    @AppStorage("ollamaModel")    var ollamaModel: String = "qwen3.8:27b-mlx"
     @AppStorage("onboardingDone") var onboardingDone: Bool = false
+    /// Whisper modellerinin duracağı klasör; boşsa Application Support/Dikte/Modeller
+    @AppStorage("modelFolder")    var modelFolderPath: String = ""
+    @AppStorage("meetingSummary") var summaryEnabled: Bool = true
+    /// Toplantı başlarken Ollama'daki büyük modeli bellekten çıkar (özet için sonda yeniden yüklenir)
+    @AppStorage("freeOllamaOnMeetingStart") var freeOllamaOnMeetingStart: Bool = true
 
     var hotkey: HotkeyOption { HotkeyOption(rawValue: hotkeyRaw) ?? .rightOption }
-    var model: ModelSize { ModelSize(rawValue: modelRaw) ?? .medium }
+    var model: ModelSize { ModelSize(rawValue: modelRaw) ?? .largeV3Turbo }
     var language: LanguageOption { LanguageOption(rawValue: languageRaw) ?? .turkish }
+
+    /// Uygulamanın kendi verileri (toplantılar, varsayılan model klasörü)
+    static var supportURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Dikte", isDirectory: true)
+    }
+
+    var modelBaseURL: URL {
+        guard !modelFolderPath.isEmpty else {
+            return Self.supportURL.appendingPathComponent("Modeller", isDirectory: true)
+        }
+        return URL(fileURLWithPath: (modelFolderPath as NSString).expandingTildeInPath, isDirectory: true)
+    }
 
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }

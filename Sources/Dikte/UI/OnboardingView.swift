@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Combine
 
 /// İlk açılışta izinleri adım adım toplayan onboarding ekranı.
 struct OnboardingView: View {

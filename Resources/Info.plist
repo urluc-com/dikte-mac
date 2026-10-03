@@ -9,19 +9,21 @@
     <key>CFBundleIdentifier</key>
     <string>com.urluc.dikte</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundleExecutable</key>
     <string>Dikte</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>14.4</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Dikte, konuşmanı yazıya çevirmek için mikrofona erişir. Ses hiçbir zaman cihaz dışına gönderilmez.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Dikte, toplantıda karşı tarafın söylediklerini yazıya dökmek için Mac'te çalan sesi dinler. Ses hiçbir zaman cihaz dışına gönderilmez.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Dikte, transkripti odaklı uygulamaya yapıştırmak için sistem olayları kullanır.</string>
     <key>NSHighResolutionCapable</key>

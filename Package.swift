@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
     name: "Dikte",
     platforms: [
-        .macOS(.v14)
+        // Sistem sesi yakalama (Core Audio process tap) 14.2, izin anahtarı 14.4 ister
+        .macOS("14.4")
     ],
     dependencies: [
         // WhisperKit artık Argmax Open-Source SDK içinde

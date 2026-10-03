@@ -25,7 +25,9 @@ enum OllamaCleanup {
         let body: [String: Any] = [
             "model": model,
             "prompt": prompt,
-            "stream": false
+            "stream": false,
+            // Düşünme kipi açık kalırsa Qwen zaman aşımına kadar bekletiyor
+            "think": false
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return transcript }
         request.httpBody = data

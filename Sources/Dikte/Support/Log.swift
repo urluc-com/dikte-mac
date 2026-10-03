@@ -9,6 +9,11 @@ enum Log {
         return dir.appendingPathComponent("dikte.log")
     }()
 
+    /// Sıradaki satırlar diske yazılana kadar bekler (çıkıştan hemen önce).
+    static func flush() {
+        queue.sync {}
+    }
+
     static func write(_ message: String) {
         queue.async {
             let stamp = ISO8601DateFormatter().string(from: Date())
