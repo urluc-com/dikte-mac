@@ -17,7 +17,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Dikte'ye hoş geldin 👋")
                     .font(.title.bold())
-                Text("Sistem genelinde sesle yazı yazmak için üç izin gerekiyor.")
+                Text("Sesle yazı yazmak için ilk üç izin, toplantı notları için dördüncüsü gerekiyor.")
                     .foregroundStyle(.secondary)
             }
 
@@ -51,6 +51,18 @@ struct OnboardingView: View {
                 HotkeyManager.requestInputMonitoring()
             }
 
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("4. Sistem sesi (toplantı için)").font(.headline)
+                    Text("Toplantıda karşı tarafın sesini yazıya dökmek için. Şimdi vermezsen ilk toplantıda sorulur.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("İzin iste") { SystemAudioPermission.request() }
+            }
+            .padding(12)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+
             Spacer()
 
             HStack {
@@ -64,7 +76,7 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(28)
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 540)
         .onReceive(timer) { _ in
             // İzin durumlarını periyodik yenile (kullanıcı Sistem Ayarları'ndan dönünce)
             micGranted = AudioEngine.microphoneAuthorized

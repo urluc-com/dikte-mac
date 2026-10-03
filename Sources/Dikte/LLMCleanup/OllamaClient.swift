@@ -8,6 +8,8 @@ enum OllamaClient {
     struct LoadedModel {
         let name: String
         let size: Int64
+        /// Modelin o an yüklü olduğu bağlam boyu (token)
+        let contextLength: Int
     }
 
     struct ChatStats {
@@ -26,7 +28,11 @@ enum OllamaClient {
         else { return [] }
         return models.compactMap { model in
             guard let name = model["name"] as? String else { return nil }
-            return LoadedModel(name: name, size: (model["size"] as? NSNumber)?.int64Value ?? 0)
+            return LoadedModel(
+                name: name,
+                size: (model["size"] as? NSNumber)?.int64Value ?? 0,
+                contextLength: (model["context_length"] as? NSNumber)?.intValue ?? 0
+            )
         }
     }
 
@@ -69,7 +75,8 @@ enum OllamaClient {
             "stream": true,
             // Qwen düşünme kipinde dakikalarca bekletiyor; özet için gerek yok
             "think": false,
-            "keep_alive": "30m",
+            // keep_alive bilerek verilmiyor: modelin bellekte kalma süresi Ollama'nın kendi
+            // ayarında kalsın (başka işler GPU'nun boşalmasını bekliyor olabilir)
             "options": ["temperature": temperature, "num_ctx": numCtx],
             "messages": [
                 ["role": "system", "content": system],

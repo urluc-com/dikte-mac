@@ -432,6 +432,22 @@ private struct LevelMeter: View {
 }
 
 enum SystemAudioPermission {
+    /// macOS'in sistem sesi izni için ayrı bir "iste" çağrısı yok; soru, yakalama ilk kez
+    /// başladığında çıkar. Bu yüzden yakalamayı kısa süre açıp kapatır.
+    static func request() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let capture = SystemAudioCapture()
+            do {
+                try capture.start()
+            } catch {
+                Log.write("Sistem sesi izni istenemedi: \(error.localizedDescription)")
+                return
+            }
+            Thread.sleep(forTimeInterval: 2)
+            capture.stop()
+        }
+    }
+
     /// Gizlilik ve Güvenlik → Ekran ve Sistem Sesi Kaydı
     static func openSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture") {

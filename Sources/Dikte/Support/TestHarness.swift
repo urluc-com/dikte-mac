@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import SwiftUI
 
 /// Toplantı hattını uçtan uca, ölçerek çalıştırır ve çıkar. İki kipi var:
 ///
@@ -16,6 +17,7 @@ import AVFoundation
 ///     DIKTE_TEST_CANLI=<sn>       canlı kip: bu kadar saniye dinle
 ///     DIKTE_TEST_DOKUM=<json>     ses yerine hazır döküm yükle (yalnız özeti sınamak için);
 ///                                 [{"konusmaci": "Ben"|"Karşı taraf", "baslangic", "bitis", "metin"}]
+///     DIKTE_TEST_GORUNUM=<adlar>  yalnız pencere görüntüsü al: "ayarlar", "kurulum" (virgülle)
 ///     DIKTE_TEST_OZET=1           özet de çıkar
 ///     DIKTE_TEST_PENCERE=1        toplantı penceresini aç, görüntüsünü al
 struct TestHarness {
@@ -25,6 +27,7 @@ struct TestHarness {
     let speed: Double
     let liveSeconds: Double?
     let transcriptFile: URL?
+    let staticViews: [String]
     let summarize: Bool
     let showWindow: Bool
 
@@ -38,6 +41,7 @@ struct TestHarness {
             speed: env["DIKTE_TEST_HIZ"].flatMap(Double.init) ?? 10,
             liveSeconds: env["DIKTE_TEST_CANLI"].flatMap(Double.init),
             transcriptFile: env["DIKTE_TEST_DOKUM"].map { URL(fileURLWithPath: $0) },
+            staticViews: env["DIKTE_TEST_GORUNUM"]?.components(separatedBy: ",") ?? [],
             summarize: env["DIKTE_TEST_OZET"] == "1",
             showWindow: env["DIKTE_TEST_PENCERE"] == "1"
         )
@@ -55,6 +59,9 @@ struct TestHarness {
             var report: [String: Any] = ["model": model]
             try? FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
 
+            if !staticViews.isEmpty {
+                await snapshotStaticViews(transcription: transcription)
+            }
             if let transcriptFile {
                 await runSummaryOnly(transcriptFile, session: session, store: store, window: window, report: report)
             }
@@ -137,6 +144,33 @@ struct TestHarness {
             }
             finish(report, code: 0)
         }
+    }
+
+    /// Ayarlar ve kurulum pencerelerini arka planda açıp görüntülerini yazar.
+    @MainActor
+    private func snapshotStaticViews(transcription: TranscriptionService) async -> Never {
+        for name in staticViews {
+            let controller: NSViewController
+            switch name {
+            case "ayarlar":
+                controller = NSHostingController(rootView: SettingsView(settings: .shared, transcription: transcription))
+            case "kurulum":
+                controller = NSHostingController(rootView: OnboardingView(onFinished: {}))
+            default:
+                continue
+            }
+            let window = NSWindow(contentViewController: controller)
+            window.styleMask = [.titled, .closable]
+            window.orderBack(nil)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: outputURL.appendingPathComponent("\(name).png"))
+            }
+            window.close()
+        }
+        finish(["gorunum": staticViews], code: 0)
     }
 
     /// Hazır dökümü toplantı olarak depoya koyar ve yalnız özeti çalıştırır.

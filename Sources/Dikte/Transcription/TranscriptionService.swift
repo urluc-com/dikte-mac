@@ -90,7 +90,7 @@ final class TranscriptionService: ObservableObject {
             throw NSError(domain: "Dikte", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Model henüz hazır değil."])
         }
-        let baseOptions = DecodingOptions(
+        let options = DecodingOptions(
             task: .transcribe,
             language: language,
             temperature: 0,
@@ -104,20 +104,6 @@ final class TranscriptionService: ObservableObject {
             // bozuyor ("Önceki" → "Langeki"). Tekrar ve düşük güven denetimleri duruyor.
             firstTokenLogProbThreshold: nil
         )
-        // GEÇİCİ DENEY: sessizlik/başlangıç etkisini ölçmek için (sonra kaldırılacak)
-        var samples = samples
-        var options = baseOptions
-        let deney = ProcessInfo.processInfo.environment["DIKTE_DENEY"] ?? ""
-        if deney.contains("kirp") {
-            let lead = samples.firstIndex { abs($0) > 1e-4 } ?? 0
-            let keep = 1_280 // 80 ms
-            if lead > keep { samples.removeFirst(lead - keep) }
-        }
-        if deney.contains("titret") {
-            for i in samples.indices { samples[i] += Float.random(in: -1...1) * 3e-4 }
-        }
-        if deney.contains("damga") { options.withoutTimestamps = false }
-        if deney.contains("onek") { samples = [Float](repeating: 0, count: 8_000) + samples }
         let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options)
         let segments = results.flatMap(\.segments)
         let text = results.map(\.text)

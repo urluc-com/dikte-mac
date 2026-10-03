@@ -8,7 +8,10 @@ import CoreAudio
 ///
 /// İlk kullanımda macOS "sistem sesini kaydetme" izni sorar (Info.plist:
 /// NSAudioCaptureUsageDescription). İzin verilmezse akış gelir ama sessizdir (hep sıfır).
-final class SystemAudioCapture {
+///
+/// Durumun tamamı kendi seri kuyruğunda değişir; `chunkHandler` ve `restartHandler` yalnız
+/// `start()` çağrılmadan önce atanmalı.
+final class SystemAudioCapture: @unchecked Sendable {
     /// ~100 ms'lik 16 kHz mono parçalar; yakalama kuyruğunda çağrılır.
     var chunkHandler: (([Float]) -> Void)?
     /// Çıkış aygıtı değişip yakalama yeniden kurulduğunda çağrılır.

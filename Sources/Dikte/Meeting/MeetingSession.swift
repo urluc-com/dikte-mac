@@ -92,14 +92,25 @@ final class MeetingSession: ObservableObject {
         // hat nesnesine dokunurlar.
         guard let micPipeline, let systemPipeline else { return nil }
 
-        var systemStarted = false
         systemAudio.chunkHandler = { chunk in systemPipeline.ingest(chunk) }
         systemAudio.restartHandler = { systemPipeline.resync() }
-        do {
-            try systemAudio.start()
-            systemStarted = true
-        } catch {
-            Log.write("Sistem sesi başlatılamadı: \(error.localizedDescription)")
+        // Tap'in kurulması izin sorusu yüzünden uzayabilir; ana iş parçacığını tutmasın
+        let systemAudio = self.systemAudio
+        let systemStarted: Bool = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try systemAudio.start()
+                    continuation.resume(returning: true)
+                } catch {
+                    Log.write("Sistem sesi başlatılamadı: \(error.localizedDescription)")
+                    continuation.resume(returning: false)
+                }
+            }
+        }
+        // Beklerken toplantı bitirilmiş olabilir
+        guard phase == .recording, activeID == id else {
+            systemAudio.stop()
+            return nil
         }
 
         var micStarted = false

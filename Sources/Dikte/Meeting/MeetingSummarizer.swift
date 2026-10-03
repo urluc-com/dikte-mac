@@ -44,7 +44,7 @@ enum MeetingSummarizer {
                     model: model,
                     system: english ? partPromptEN : partPromptTR,
                     user: user,
-                    numCtx: contextSize(forChars: user.count),
+                    numCtx: await contextSize(forChars: user.count, model: model),
                     onDelta: { _ in }
                 )
                 notes.append(text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -61,7 +61,7 @@ enum MeetingSummarizer {
             model: model,
             system: english ? summaryPromptEN : summaryPromptTR,
             user: user,
-            numCtx: contextSize(forChars: user.count),
+            numCtx: await contextSize(forChars: user.count, model: model),
             onDelta: { partial in onPartial(splitTitle(partial).body) }
         )
         stats.promptTokens += finalStats.promptTokens
@@ -88,9 +88,14 @@ enum MeetingSummarizer {
 
     // MARK: - Yardımcılar
 
-    /// İstem + yanıt payına yetecek en küçük bağlam boyu
-    private static func contextSize(forChars chars: Int) -> Int {
+    /// İstem + yanıt payına yetecek bağlam boyu. Model zaten yeterli bir bağlamla bellekteyse
+    /// o boy kullanılır: farklı bir boy istemek Ollama'ya modeli baştan yükletir.
+    private static func contextSize(forChars chars: Int, model: String) async -> Int {
         let needed = Int(Double(chars + 1_800) / charsPerToken) + outputReserveTokens
+        if let loaded = await OllamaClient.loadedModels().first(where: { $0.name == model }),
+           loaded.contextLength >= needed {
+            return loaded.contextLength
+        }
         return [8_192, 16_384, 32_768].first { $0 >= needed } ?? 32_768
     }
 
