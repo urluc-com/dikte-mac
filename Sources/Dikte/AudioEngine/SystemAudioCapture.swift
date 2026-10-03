@@ -32,8 +32,8 @@ final class SystemAudioCapture: @unchecked Sendable {
     /// Bir parçada en az bu kadar örnek birikince teslim edilir (100 ms)
     private static let batchSize = 1_600
 
-    var isRunning: Bool { queue.sync { running } }
-
+    /// İzin daha önce verilmediyse macOS bu çağrı sırasında sorar ve kullanıcı yanıtlayana
+    /// kadar çağrı DÖNMEZ; bu yüzden ana iş parçacığından çağrılmamalı.
     func start() throws {
         try queue.sync {
             guard !running else { return }
@@ -48,8 +48,10 @@ final class SystemAudioCapture: @unchecked Sendable {
         }
     }
 
+    /// Beklemeden döner: `start()` izin sorusunda takılıyken çağrılırsa, durdurma o çağrı
+    /// döndükten sonra uygulanır.
     func stop() {
-        queue.sync {
+        queue.async { [self] in
             guard running else { return }
             running = false
             removeOutputDeviceListener()

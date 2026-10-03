@@ -17,6 +17,8 @@ import SwiftUI
 ///     DIKTE_TEST_CANLI=<sn>       canlı kip: bu kadar saniye dinle
 ///     DIKTE_TEST_DOKUM=<json>     ses yerine hazır döküm yükle (yalnız özeti sınamak için);
 ///                                 [{"konusmaci": "Ben"|"Karşı taraf", "baslangic", "bitis", "metin"}]
+///     DIKTE_TEST_TAP=<sn>         yalnız sistem sesi yakalamayı dene: bu kadar saniye dinle, gelen
+///                                 parça sayısını ve seviyeyi yaz, sesi tap.wav'a kaydet
 ///     DIKTE_TEST_GORUNUM=<adlar>  yalnız pencere görüntüsü al: "ayarlar", "kurulum" (virgülle)
 ///     DIKTE_TEST_OZET=1           özet de çıkar
 ///     DIKTE_TEST_PENCERE=1        toplantı penceresini aç, görüntüsünü al
@@ -28,6 +30,7 @@ struct TestHarness {
     let liveSeconds: Double?
     let transcriptFile: URL?
     let staticViews: [String]
+    let tapSeconds: Double?
     let summarize: Bool
     let showWindow: Bool
 
@@ -42,6 +45,7 @@ struct TestHarness {
             liveSeconds: env["DIKTE_TEST_CANLI"].flatMap(Double.init),
             transcriptFile: env["DIKTE_TEST_DOKUM"].map { URL(fileURLWithPath: $0) },
             staticViews: env["DIKTE_TEST_GORUNUM"]?.components(separatedBy: ",") ?? [],
+            tapSeconds: env["DIKTE_TEST_TAP"].flatMap(Double.init),
             summarize: env["DIKTE_TEST_OZET"] == "1",
             showWindow: env["DIKTE_TEST_PENCERE"] == "1"
         )
@@ -61,6 +65,9 @@ struct TestHarness {
 
             if !staticViews.isEmpty {
                 await snapshotStaticViews(transcription: transcription)
+            }
+            if let tapSeconds {
+                await runTapProbe(seconds: tapSeconds)
             }
             if let transcriptFile {
                 await runSummaryOnly(transcriptFile, session: session, store: store, window: window, report: report)
@@ -146,6 +153,66 @@ struct TestHarness {
             }
             finish(report, code: 0)
         }
+    }
+
+    /// Yalnız sistem sesi yakalamayı çalıştırır: tap kuruluyor mu, veri akıyor mu, ses var mı.
+    /// İzin sorusu yanıtsız kalırsa kurulum dönmeyebilir; o durumda süre dolunca rapor yazıp çıkar.
+    @MainActor
+    private func runTapProbe(seconds: Double) async -> Never {
+        final class Tally: @unchecked Sendable {
+            let lock = NSLock()
+            var chunks = 0
+            var samples: [Float] = []
+            var started: Bool?
+            var error: String?
+        }
+        let tally = Tally()
+        let capture = SystemAudioCapture()
+        capture.chunkHandler = { chunk in
+            tally.lock.lock()
+            tally.chunks += 1
+            tally.samples.append(contentsOf: chunk)
+            tally.lock.unlock()
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try capture.start()
+                tally.lock.lock(); tally.started = true; tally.lock.unlock()
+            } catch {
+                tally.lock.lock(); tally.started = false; tally.error = error.localizedDescription; tally.lock.unlock()
+            }
+        }
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))
+
+        let (started, chunks, samples, error) = tally.lock.withLock {
+            (tally.started, tally.chunks, tally.samples, tally.error)
+        }
+        if started == true {
+            DispatchQueue.global().async { capture.stop() }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+
+        var report: [String: Any] = [
+            "tapBasladi": started.map { $0 ? "evet" : "hayır" } ?? "kurulum dönmedi (izin sorusu bekliyor olabilir)",
+            "parcaSayisi": chunks,
+            "ornekSayisi": samples.count,
+            "beklenenOrnek": Int(seconds * SpeechSegmenter.sampleRate),
+            "sifirOlmayanOrnek": samples.filter { $0 != 0 }.count,
+            "tepe": Double(samples.map { abs($0) }.max() ?? 0)
+        ]
+        if let error { report["hata"] = error }
+        if !samples.isEmpty,
+           let file = try? AVAudioFile(forWriting: outputURL.appendingPathComponent("tap.wav"),
+                                       settings: Resampler16k.targetFormat.settings),
+           let buffer = AVAudioPCMBuffer(pcmFormat: Resampler16k.targetFormat,
+                                         frameCapacity: AVAudioFrameCount(samples.count)) {
+            buffer.frameLength = AVAudioFrameCount(samples.count)
+            samples.withUnsafeBufferPointer { source in
+                buffer.floatChannelData![0].update(from: source.baseAddress!, count: samples.count)
+            }
+            try? file.write(from: buffer)
+        }
+        finish(report, code: started == true ? 0 : 1)
     }
 
     /// Ayarlar ve kurulum pencerelerini arka planda açıp görüntülerini yazar.

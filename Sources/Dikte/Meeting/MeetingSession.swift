@@ -32,6 +32,8 @@ final class MeetingSession: ObservableObject {
     /// Sistem sesi kanalından sıfırdan farklı ses geldi mi (izin verilmediyse hep sessiz kalır)
     @Published private(set) var systemAudioHeard = false
     @Published private(set) var micActive = false
+    /// Sistem sesi yakalama henüz başlamadı (ilk seferde izin sorusu yanıt bekliyor olabilir)
+    @Published private(set) var systemAudioPending = false
     @Published var notice: String?
     /// Son özetin token ve süre ölçümü
     private(set) var lastSummaryStats: OllamaClient.ChatStats?
@@ -67,6 +69,8 @@ final class MeetingSession: ObservableObject {
 
     // MARK: - Başlat / bitir
 
+    /// Toplantıyı mikrofonla hemen başlatır; sistem sesi arkadan eklenir (ilk seferde izin
+    /// sorusu kullanıcıyı bekletebilir).
     /// - Returns: Başlayan toplantının kimliği; başlatılamadıysa nil (neden `notice`'te).
     @discardableResult
     func start() async -> UUID? {
@@ -77,10 +81,11 @@ final class MeetingSession: ObservableObject {
         }
         notice = nil
 
-        var micAllowed = AudioEngine.microphoneAuthorized
-        if !micAllowed, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            micAllowed = await AudioEngine.requestMicrophonePermission()
+        var granted = AudioEngine.microphoneAuthorized
+        if !granted, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            granted = await AudioEngine.requestMicrophonePermission()
         }
+        let micAllowed = granted
         // İzin penceresi beklerken başka bir başlatma araya girmiş olabilir
         guard phase == .idle else { return activeID }
 
@@ -94,27 +99,8 @@ final class MeetingSession: ObservableObject {
         // hat nesnesine dokunurlar.
         guard let micPipeline, let systemPipeline else { return nil }
 
-        systemAudio.chunkHandler = { chunk in systemPipeline.ingest(chunk) }
-        systemAudio.restartHandler = { systemPipeline.resync() }
-        // Tap'in kurulması izin sorusu yüzünden uzayabilir; ana iş parçacığını tutmasın
-        let systemAudio = self.systemAudio
-        let systemStarted: Bool = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    try systemAudio.start()
-                    continuation.resume(returning: true)
-                } catch {
-                    Log.write("Sistem sesi başlatılamadı: \(error.localizedDescription)")
-                    continuation.resume(returning: false)
-                }
-            }
-        }
-        // Beklerken toplantı bitirilmiş olabilir
-        guard phase == .recording, activeID == id else {
-            systemAudio.stop()
-            return nil
-        }
-
+        // Önce mikrofon: sistem sesi tarafı izin sorusu yüzünden bekleyebilir, o sırada
+        // kullanıcının söyledikleri kaçmasın.
         var micStarted = false
         if micAllowed {
             mic.streamRestartHandler = { micPipeline.resync() }
@@ -127,20 +113,47 @@ final class MeetingSession: ObservableObject {
         }
         micActive = micStarted
 
-        guard systemStarted || micStarted else {
-            notice = "Ne mikrofon ne sistem sesi açılabildi; toplantı başlatılamadı."
-            clearActive()
-            store.discardEmpty(id)
-            return nil
+        systemAudio.chunkHandler = { chunk in systemPipeline.ingest(chunk) }
+        systemAudio.restartHandler = { systemPipeline.resync() }
+        // Sistem sesi izni ilk kez soruluyorsa yakalamanın başlaması kullanıcı yanıtlayana kadar
+        // sürer; toplantı o arada mikrofonla başlamış olur, pencere de hemen açılır.
+        let systemAudio = self.systemAudio
+        systemAudioPending = true
+        Task { @MainActor in
+            defer { self.systemAudioPending = false }
+            let systemStarted: Bool = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try systemAudio.start()
+                        continuation.resume(returning: true)
+                    } catch {
+                        Log.write("Sistem sesi başlatılamadı: \(error.localizedDescription)")
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+            // Beklerken toplantı bitirilmiş olabilir
+            guard self.phase == .recording, self.activeID == id else {
+                systemAudio.stop()
+                return
+            }
+            guard systemStarted || micStarted else {
+                self.notice = "Ne mikrofon ne sistem sesi açılabildi; toplantı başlatılamadı."
+                self.micPipeline = nil
+                self.systemPipeline = nil
+                self.clearActive()
+                self.store.discardEmpty(id)
+                return
+            }
+            if !systemStarted {
+                self.notice = "Sistem sesi yakalanamadı: yalnız mikrofon yazıya dökülecek."
+            } else if !micStarted {
+                self.notice = micAllowed
+                    ? "Mikrofon açılamadı: yalnız karşı tarafın sesi yazıya dökülecek."
+                    : "Mikrofon izni yok: yalnız karşı tarafın sesi yazıya dökülecek."
+            }
+            Log.write("Toplantı başladı (mikrofon: \(micStarted), sistem sesi: \(systemStarted))")
         }
-        if !systemStarted {
-            notice = "Sistem sesi yakalanamadı: yalnız mikrofon yazıya dökülecek."
-        } else if !micStarted {
-            notice = micAllowed
-                ? "Mikrofon açılamadı: yalnız karşı tarafın sesi yazıya dökülecek."
-                : "Mikrofon izni yok: yalnız karşı tarafın sesi yazıya dökülecek."
-        }
-        Log.write("Toplantı başladı (mikrofon: \(micStarted), sistem sesi: \(systemStarted))")
         return id
     }
 

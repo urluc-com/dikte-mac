@@ -390,8 +390,14 @@ private struct LiveStrip: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if session.systemAudioPending {
+                Text("Sistem sesi için izin bekleniyor. İzin sorusunu yanıtlayınca karşı tarafın sesi de yazıya dökülür; mikrofon şimdiden dinleniyor.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             TimelineView(.periodic(from: startedAt, by: 5)) { context in
-                if !session.systemAudioHeard, context.date.timeIntervalSince(startedAt) > 20 {
+                if !session.systemAudioPending, !session.systemAudioHeard,
+                   context.date.timeIntervalSince(startedAt) > 20 {
                     HStack(spacing: 8) {
                         Text("Mac'ten henüz ses gelmedi. Bir şey çalıyorsa Dikte'nin sistem sesi izni kapalı olabilir.")
                             .font(.system(size: 11))
