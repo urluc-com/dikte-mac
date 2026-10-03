@@ -12,9 +12,11 @@ enum MeetingSummarizer {
         let stats: OllamaClient.ChatStats
     }
 
-    /// Türkçe metinde kabaca 1 token ≈ 2,4 karakter (Qwen ile ölçüldü)
+    /// Bağlam boyunu seçerken kullanılan ihtiyatlı oran. Qwen 3.8 ile ölçülen değer Türkçe
+    /// dökümde 1 token ≈ 3,1 karakter (4.400 karakterlik istem 1.425 token tuttu); pay
+    /// kalsın diye daha düşük alındı.
     private static let charsPerToken = 2.4
-    /// Tek seferde modele verilecek en uzun döküm (karakter): ~24 bin token
+    /// Tek seferde modele verilecek en uzun döküm (karakter): ihtiyatlı oranla ~24 bin token
     private static let maxSinglePassChars = 58_000
     private static let outputReserveTokens = 1_500
 

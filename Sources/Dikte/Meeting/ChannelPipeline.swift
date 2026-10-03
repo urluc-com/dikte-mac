@@ -11,6 +11,8 @@ final class ChannelPipeline {
     private let fixedOffset: Double?
     private let onSegment: (Speaker, Double, [Float]) -> Void
     private let onLevel: (Float) -> Void
+    private let onSpeaking: (Bool) -> Void
+    private var reportedSpeaking = false
 
     private let lock = NSLock()
     private var segmenter = SpeechSegmenter()
@@ -22,14 +24,17 @@ final class ChannelPipeline {
     /// - Parameters:
     ///   - onSegment: (konuşmacı, toplantı başından itibaren saniye, 16 kHz örnekler)
     ///   - onLevel: 0...1 arası anlık seviye, saniyede en çok ~12 kez
+    ///   - onSpeaking: kanalda konuşma başladığında true, parça kapandığında false
     init(speaker: Speaker, meetingStart: Date, fixedOffset: Double? = nil,
          onSegment: @escaping (Speaker, Double, [Float]) -> Void,
-         onLevel: @escaping (Float) -> Void) {
+         onLevel: @escaping (Float) -> Void,
+         onSpeaking: @escaping (Bool) -> Void) {
         self.speaker = speaker
         self.meetingStart = meetingStart
         self.fixedOffset = fixedOffset
         self.onSegment = onSegment
         self.onLevel = onLevel
+        self.onSpeaking = onSpeaking
     }
 
     func ingest(_ chunk: [Float]) {
@@ -61,9 +66,13 @@ final class ChannelPipeline {
         }
         let postLevel = now.timeIntervalSince(lastLevelPost) > 0.08
         if postLevel { lastLevelPost = now }
+        let speaking = segmenter.inSpeech
+        let speakingChanged = speaking != reportedSpeaking
+        reportedSpeaking = speaking
         lock.unlock()
 
         for (start, samples) in finished { onSegment(speaker, start, samples) }
+        if speakingChanged { onSpeaking(speaking) }
         if postLevel { onLevel(min(1, vDSP.rootMeanSquare(chunk) * 12)) }
     }
 
@@ -77,8 +86,11 @@ final class ChannelPipeline {
         segmenter = SpeechSegmenter()
         offset = nil
         lastArrival = nil
+        let wasSpeaking = reportedSpeaking
+        reportedSpeaking = false
         lock.unlock()
         if let finished { onSegment(speaker, finished.0, finished.1) }
+        if wasSpeaking { onSpeaking(false) }
     }
 
     /// Toplantı bitti: süren parça varsa döndürür.

@@ -27,6 +27,8 @@ final class MeetingSession: ObservableObject {
     @Published private(set) var summarizingID: UUID?
     let levels = MeetingLevels()
     @Published private(set) var pendingSegments = 0
+    /// O an konuşması süren (parçası henüz kapanmamış) kanallar
+    @Published private(set) var speaking: Set<Speaker> = []
     /// Sistem sesi kanalından sıfırdan farklı ses geldi mi (izin verilmediyse hep sessiz kalır)
     @Published private(set) var systemAudioHeard = false
     @Published private(set) var micActive = false
@@ -146,6 +148,7 @@ final class MeetingSession: ObservableObject {
     func finish() {
         guard phase == .recording, let id = activeID else { return }
         phase = .finishing
+        speaking = []
         systemAudio.stop()
         mic.stopStreaming()
         store.update(id) { $0.endedAt = Date() }
@@ -183,6 +186,9 @@ final class MeetingSession: ObservableObject {
             },
             onLevel: { [weak self] level in
                 Task { @MainActor in self?.levels.mic = level }
+            },
+            onSpeaking: { [weak self] speaking in
+                Task { @MainActor in self?.setSpeaking(.me, speaking) }
             }
         )
         systemPipeline = ChannelPipeline(
@@ -196,6 +202,9 @@ final class MeetingSession: ObservableObject {
                     self.levels.system = level
                     if level > 0.0005, !self.systemAudioHeard { self.systemAudioHeard = true }
                 }
+            },
+            onSpeaking: { [weak self] speaking in
+                Task { @MainActor in self?.setSpeaking(.them, speaking) }
             }
         )
         return meeting.id
@@ -231,6 +240,12 @@ final class MeetingSession: ObservableObject {
         activeID = nil
         micActive = false
         pendingSegments = 0
+        speaking = []
+    }
+
+    private func setSpeaking(_ speaker: Speaker, _ isSpeaking: Bool) {
+        guard phase == .recording else { return }
+        if isSpeaking { speaking.insert(speaker) } else { speaking.remove(speaker) }
     }
 
     // MARK: - Yazıya döküm sırası

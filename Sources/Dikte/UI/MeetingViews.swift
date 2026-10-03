@@ -254,7 +254,8 @@ private struct MeetingDetailView: View {
             Group {
                 switch tab {
                 case .transcript:
-                    TranscriptView(blocks: meeting.blocks, follow: isLive)
+                    TranscriptView(blocks: meeting.blocks, follow: isLive,
+                                   speaking: isLive ? session.speaking : [])
                 case .summary:
                     SummaryView(text: meeting.summary, working: isSummarizing) {
                         session.summarize(meeting.id)
@@ -462,11 +463,17 @@ private struct TranscriptView: View {
     let blocks: [TranscriptBlock]
     /// Canlıyken yeni satır geldikçe sona kay
     let follow: Bool
+    /// Konuşması süren, satırı henüz düşmemiş kanallar
+    let speaking: Set<Speaker>
 
     private static let bottomID = "son"
 
+    private var speakingNow: [Speaker] {
+        [Speaker.me, .them].filter(speaking.contains)
+    }
+
     var body: some View {
-        if blocks.isEmpty {
+        if blocks.isEmpty, speaking.isEmpty {
             Text(follow ? "Dinleniyor… konuşma başlayınca satırlar burada akacak." : "Bu toplantıda döküm yok.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
@@ -477,6 +484,9 @@ private struct TranscriptView: View {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(blocks) { block in
                             TranscriptBlockView(block: block)
+                        }
+                        ForEach(speakingNow, id: \.self) { speaker in
+                            SpeakingRow(speaker: speaker)
                         }
                         Color.clear.frame(height: 1).id(Self.bottomID)
                     }
@@ -489,8 +499,32 @@ private struct TranscriptView: View {
                         proxy.scrollTo(Self.bottomID, anchor: .bottom)
                     }
                 }
+                .onChange(of: speaking) { _, _ in
+                    guard follow else { return }
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
             }
         }
+    }
+}
+
+/// Konuşma sürerken, satır düşmeden önce görünen "konuşuyor…" satırı.
+private struct SpeakingRow: View {
+    let speaker: Speaker
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Brand.color(for: speaker).opacity(0.45))
+                .frame(width: 3, height: 16)
+            Text(speaker.label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Brand.color(for: speaker))
+            Text("konuşuyor…")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -103,7 +103,9 @@ struct TestHarness {
 
                 id = session.startForTest()
                 if showWindow { window.showForTest(selecting: id) }
-                await feed(system: system, mic: mic, into: session)
+                await feed(system: system, mic: mic, into: session) {
+                    if showWindow { window.snapshot(to: outputURL.appendingPathComponent("pencere-orta.png")) }
+                }
                 // Beslenen parçalar yazıya dökülsün ki canlı görüntü dolu çıksın
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 while session.pendingSegments > 0 { try? await Task.sleep(nanoseconds: 100_000_000) }
@@ -228,12 +230,20 @@ struct TestHarness {
 
     /// İki kanalı aynı saatle, 100 ms'lik parçalarla besler.
     @MainActor
-    private func feed(system: [Float], mic: [Float], into session: MeetingSession) async {
+    private func feed(system: [Float], mic: [Float], into session: MeetingSession,
+                      atMidpoint: () -> Void) async {
         let chunk = 1_600
         let total = max(system.count, mic.count)
         let pause = UInt64(0.1 / max(speed, 0.1) * 1e9)
         var position = 0
+        var midpointDone = false
         while position < total {
+            if !midpointDone, position >= total / 2 {
+                midpointDone = true
+                // Konuşma sürerken pencerenin hali ("konuşuyor…" satırı) görülsün
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                atMidpoint()
+            }
             if position < system.count {
                 session.ingestForTest(.them, Array(system[position..<min(position + chunk, system.count)]))
             }
