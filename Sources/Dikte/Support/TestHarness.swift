@@ -62,6 +62,7 @@ struct TestHarness {
     func run(transcription: TranscriptionService, session: MeetingSession, store: MeetingStore,
              window: MeetingWindowController, model: String) {
         Task { @MainActor in
+            Self.installCrashBacktrace()
             let env = ProcessInfo.processInfo.environment
             let model = env["DIKTE_TEST_MODEL"] ?? model
             transcription.cpuOnly = env["DIKTE_TEST_ISLEMCI"] == "1"
@@ -92,6 +93,11 @@ struct TestHarness {
             }
             report["bellekModelSonrasiMB"] = round1(MemoryProbe.footprintMB())
             session.autoSummarize = summarize
+
+            // Döküm sürerken arayüz iş parçacığı ne kadar takılıyor? 20 ms'lik bir zamanlayıcının
+            // iki tıkı arasındaki en uzun boşluk ölçülür.
+            let stall = MainThreadStallProbe()
+            stall.start()
 
             let transcribeStart = Date()
             let id: UUID
@@ -131,6 +137,7 @@ struct TestHarness {
                 await session.finishForTest(duration: seconds)
             }
             report["dokumSn"] = round1(Date().timeIntervalSince(transcribeStart))
+            report["anaIsParcacigiEnUzunTakilmaMs"] = Int(stall.stop() * 1000)
             report["bellekDokumSonrasiMB"] = round1(MemoryProbe.footprintMB())
 
             if summarize {
@@ -305,6 +312,19 @@ struct TestHarness {
         report["ozetYanitToken"] = stats.outputTokens
     }
 
+    /// Test sırasında süreç çökerse (bellek hatası vb.) çöken iş parçacığının yığınını stderr'e
+    /// yazar; çökme raporunun oluşmadığı durumlarda (ör. Rosetta altında) nedeni görmek için.
+    private static func installCrashBacktrace() {
+        for sig in [SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGABRT] {
+            signal(sig) { number in
+                var frames = [UnsafeMutableRawPointer?](repeating: nil, count: 64)
+                let count = backtrace(&frames, 64)
+                backtrace_symbols_fd(&frames, count, 2)
+                _exit(128 + number)
+            }
+        }
+    }
+
     /// İki kanalı aynı saatle, 100 ms'lik parçalarla besler.
     @MainActor
     private func feed(system: [Float], mic: [Float], into session: MeetingSession,
@@ -353,5 +373,34 @@ struct TestHarness {
         }
         Log.flush()
         exit(code)
+    }
+}
+
+/// Ana iş parçacığındaki 20 ms'lik zamanlayıcının tıkları arasındaki en uzun boşluğu ölçer.
+@MainActor
+final class MainThreadStallProbe {
+    private var timer: Timer?
+    private var last = Date()
+    private var longest: TimeInterval = 0
+
+    func start() {
+        last = Date()
+        longest = 0
+        timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = Date()
+                self.longest = max(self.longest, now.timeIntervalSince(self.last))
+                self.last = now
+            }
+        }
+        RunLoop.main.add(timer!, forMode: .common)
+    }
+
+    /// - Returns: En uzun boşluk (sn)
+    func stop() -> TimeInterval {
+        timer?.invalidate()
+        timer = nil
+        return max(longest, Date().timeIntervalSince(last))
     }
 }

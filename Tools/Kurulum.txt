@@ -2,7 +2,7 @@ DİKTE — KURULUM
 
 Gerekenler
   • macOS 14.4 (Sonoma) ya da daha yenisi. Daha eski bir macOS'te uygulama açılmaz.
-  • Apple Silicon ya da Intel Mac (uygulama ikisini de içerir).
+  • Apple Silicon Mac (M1 ve sonrası). Intel Mac'te çalışmaz.
   • İlk açılışta modeli indirmek için internet.
 
 Kurulum
@@ -11,14 +11,16 @@ Kurulum
   3. macOS "Apple bu uygulamayı doğrulayamadı" diye engellerse (uygulama kişisel
      kullanım için derlendi, Apple'a onaylatılmadı):
        Sistem Ayarları > Gizlilik ve Güvenlik > aşağıdaki "Dikte engellendi"
-       satırında "Yine de Aç".
+       satırında "Yine de Aç". (macOS 14'te: Dikte'ye sağ tıkla > Aç > Aç.)
      Ya da Terminal'de tek satır:
        xattr -dr com.apple.quarantine /Applications/Dikte.app
+     Dosyayı AirDrop ya da e-posta yerine harici diskle taşırsan macOS çoğu
+     zaman bu soruyu sormaz.
   4. Açılan kurulum penceresindeki izinleri ver: Mikrofon, Erişilebilirlik,
      Giriş İzleme, Sistem sesi.
-  5. "Başla"ya bas. Konuşma tanıma modeli iner ve bir kez hazırlanır
-     (Apple Silicon: yaklaşık 1,6 GB, Intel: yaklaşık 0,5 GB). Menü çubuğundaki
-     mikrofon simgesinde ilerleme görünür.
+  5. "Başla"ya bas. Konuşma tanıma modeli (yaklaşık 1,6 GB) iner ve bir kez
+     hazırlanır; hazırlık birkaç dakika sürebilir. Menü çubuğundaki mikrofon
+     simgesinde ilerleme görünür.
 
 Kullanım
   • Dikte: Sağ Option (⌥) tuşunu basılı tut, konuş, bırak; metin imlecin olduğu
@@ -32,12 +34,6 @@ Toplantı özeti
   Özet, bu bilgisayarda çalışan Ollama'yı kullanır (Ayarlar > Ollama > Model).
   Ollama kurulu değilse döküm yine alınır, yalnız özet çıkmaz; bu durumda
   Ayarlar'dan "Toplantı bitince özet çıkar"ı kapatabilirsin.
-
-Intel Mac
-  Intel'de Neural Engine olmadığı için model işlemcide çalışır. Uygulama orada
-  varsayılan olarak küçük modeli (Small) seçer: canlı konuşmaya yetişir ama
-  büyük modele göre daha çok kelime hatası yapar. Ayarlar > Model'den Medium
-  ya da Large v3 Turbo seçilebilir; daha doğru yazarlar ama satırlar gecikir.
 
 Sorun çıkarsa
   • Günlük: ~/Library/Logs/Dikte/dikte.log

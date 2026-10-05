@@ -27,26 +27,13 @@ enum ModelSize: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Apple Silicon'da Neural Engine büyük modeli canlı konuşmaya yetiştirir. Intel'de model
-    /// işlemcide koşar; turbo'nun kodlayıcısı large ile aynı ağırlıkta olduğu için canlı
-    /// döküme ancak küçük model yetişir.
-    static var recommended: ModelSize {
-        #if arch(x86_64)
-        return .small
-        #else
-        return .largeV3Turbo
-        #endif
-    }
-
     var label: String {
-        let name: String
         switch self {
-        case .small:        name = "Small (hızlı, ~500 MB)"
-        case .medium:       name = "Medium (~1,5 GB)"
-        case .largeV3Turbo: name = "Large v3 Turbo (~1,6 GB)"
-        case .largeV3:      name = "Large v3 (en doğru, ~3 GB)"
+        case .small:        return "Small (hızlı, ~500 MB)"
+        case .medium:       return "Medium (~1,5 GB)"
+        case .largeV3Turbo: return "Large v3 Turbo (önerilen, ~1,6 GB)"
+        case .largeV3:      return "Large v3 (en doğru, ~3 GB)"
         }
-        return self == Self.recommended ? name + " — önerilen" : name
     }
 }
 
@@ -73,7 +60,7 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @AppStorage("hotkey")         var hotkeyRaw: String = HotkeyOption.rightOption.rawValue
-    @AppStorage("modelSize")      var modelRaw: String = ModelSize.recommended.rawValue
+    @AppStorage("modelSize")      var modelRaw: String = ModelSize.largeV3Turbo.rawValue
     @AppStorage("language")       var languageRaw: String = LanguageOption.turkish.rawValue
     @AppStorage("llmCleanup")     var llmCleanupEnabled: Bool = false
     @AppStorage("ollamaModel")    var ollamaModel: String = "qwen3.8:27b-mlx"
@@ -85,7 +72,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("freeOllamaOnMeetingStart") var freeOllamaOnMeetingStart: Bool = true
 
     var hotkey: HotkeyOption { HotkeyOption(rawValue: hotkeyRaw) ?? .rightOption }
-    var model: ModelSize { ModelSize(rawValue: modelRaw) ?? .recommended }
+    var model: ModelSize { ModelSize(rawValue: modelRaw) ?? .largeV3Turbo }
     var language: LanguageOption { LanguageOption(rawValue: languageRaw) ?? .turkish }
 
     /// Uygulamanın kendi verileri (toplantılar, varsayılan model klasörü)

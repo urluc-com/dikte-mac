@@ -7,13 +7,9 @@ cd "$(dirname "$0")"
 APP_NAME="Dikte"
 BUNDLE_DIR="build/${APP_NAME}.app"
 
-# Evrensel ikili: Apple Silicon + Intel. Intel'de Neural Engine olmadığı için model işlemcide
-# koşar; uygulama orada varsayılan olarak küçük modeli seçer (bkz. ModelSize.recommended).
-ARCHS=(--arch arm64 --arch x86_64)
-
-echo "==> Release derleniyor (arm64 + x86_64)…"
-swift build -c release "${ARCHS[@]}"
-BIN_DIR="$(swift build -c release "${ARCHS[@]}" --show-bin-path)"
+echo "==> Release derleniyor (arm64)…"
+swift build -c release --arch arm64
+BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
 
 echo "==> .app paketi oluşturuluyor…"
 rm -rf build
