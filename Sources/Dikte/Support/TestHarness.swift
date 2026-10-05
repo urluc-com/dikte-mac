@@ -15,6 +15,8 @@ import SwiftUI
 ///     DIKTE_TEST_MIK=<ses>        mikrofon kanalı (dosya kipi)
 ///     DIKTE_TEST_HIZ=<kat>        besleme hızı, gerçek zamanın katı (varsayılan 10)
 ///     DIKTE_TEST_CANLI=<sn>       canlı kip: bu kadar saniye dinle
+///     DIKTE_TEST_ESIK=<rms>       canlı kipte sistem sesi konuşma eşiği (varsayılan 0.004); çok kısık
+///                                 çalınan test sesini yakalamak için
 ///     DIKTE_TEST_DOKUM=<json>     ses yerine hazır döküm yükle (yalnız özeti sınamak için);
 ///                                 [{"konusmaci": "Ben"|"Karşı taraf", "baslangic", "bitis", "metin"}]
 ///     DIKTE_TEST_TAP=<sn>         yalnız yakalamayı dene: sistem sesini (ve izni varsa mikrofonu) bu
@@ -103,12 +105,16 @@ struct TestHarness {
             let transcribeStart = Date()
             let id: UUID
             if let liveSeconds {
+                session.skipOllamaUnload = true
+                if let threshold = env["DIKTE_TEST_ESIK"].flatMap(Float.init) {
+                    session.systemSegmenterConfig.minThreshold = threshold
+                }
                 guard let started = await session.start() else {
                     report["hata"] = "Toplantı başlatılamadı: \(session.notice ?? "?")"
                     finish(report, code: 1)
                 }
                 id = started
-                if showWindow { window.show(selecting: id) }
+                if showWindow { window.showForTest(selecting: id) }
                 try? await Task.sleep(nanoseconds: UInt64(liveSeconds * 1e9))
                 report["sistemSesiDuyuldu"] = session.systemAudioHeard
                 report["mikrofonAcik"] = session.micActive

@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @State private var micGranted = AudioEngine.microphoneAuthorized
     @State private var accessibilityGranted = TextInjector.hasAccessibilityPermission()
     @State private var inputMonitoringGranted = HotkeyManager.inputMonitoringAuthorized
+    @State private var systemAudioRequested = false
 
     var onFinished: () -> Void
 
@@ -17,7 +18,8 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Dikte'ye hoş geldin 👋")
                     .font(.title.bold())
-                Text("Sesle yazı yazmak için ilk üç izin, toplantı notları için dördüncüsü gerekiyor.")
+                Text("Toplantı notları için mikrofon ve sistem sesi yeter. Sesle yazı yazmak (bas-konuş) için erişilebilirlik ve giriş izleme de gerekir; onları sonra da verebilirsin.")
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
             }
 
@@ -58,7 +60,21 @@ struct OnboardingView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("İzin iste") { SystemAudioPermission.request() }
+                if systemAudioRequested {
+                    // macOS bu iznin durumunu uygulamaya söylemiyor; soru bir kez çıkar,
+                    // sonrası Sistem Ayarları'ndan görülür
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Label("İstendi", systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                        Button("Ayarlarda gör") { SystemAudioPermission.openSettings() }
+                            .controlSize(.small)
+                    }
+                } else {
+                    Button("İzin iste") {
+                        systemAudioRequested = true
+                        SystemAudioPermission.request()
+                    }
+                }
             }
             .padding(12)
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
@@ -69,14 +85,14 @@ struct OnboardingView: View {
                 Spacer()
                 Button("Başla") { onFinished() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!(micGranted && accessibilityGranted))
+                    .disabled(!micGranted)
             }
             Text("İpucu: İzinleri verdikten sonra macOS uygulamayı yeniden başlatmanı isteyebilir.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(28)
-        .frame(width: 480, height: 540)
+        .frame(width: 480, height: 570)
         .onReceive(timer) { _ in
             // İzin durumlarını periyodik yenile (kullanıcı Sistem Ayarları'ndan dönünce)
             micGranted = AudioEngine.microphoneAuthorized

@@ -39,6 +39,10 @@ final class MeetingSession: ObservableObject {
     private(set) var lastSummaryStats: OllamaClient.ChatStats?
     /// nil ise ayardaki "toplantı bitince özet çıkar" tercihi geçerlidir
     var autoSummarize: Bool?
+    /// Test: toplantı başlarken Ollama modellerine dokunma
+    var skipOllamaUnload = false
+    /// Sistem sesi kanalının bölütleyici ayarı (test, çok kısık çalan sesi yakalamak için eşiği düşürür)
+    var systemSegmenterConfig = SpeechSegmenter.Config()
 
     private let transcription: TranscriptionService
     private let store: MeetingStore
@@ -89,7 +93,7 @@ final class MeetingSession: ObservableObject {
         // İzin penceresi beklerken başka bir başlatma araya girmiş olabilir
         guard phase == .idle else { return activeID }
 
-        if settings.freeOllamaOnMeetingStart, summarizingID == nil {
+        if settings.freeOllamaOnMeetingStart, !skipOllamaUnload, summarizingID == nil {
             Task.detached { await OllamaClient.unloadLargeModels() }
         }
 
@@ -206,6 +210,7 @@ final class MeetingSession: ObservableObject {
         )
         systemPipeline = ChannelPipeline(
             speaker: .them, meetingStart: date, fixedOffset: fixedOffset,
+            segmenterConfig: systemSegmenterConfig,
             onSegment: { [weak self] speaker, start, samples in
                 Task { @MainActor in self?.enqueue(Pending(speaker: speaker, start: start, samples: samples)) }
             },

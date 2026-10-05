@@ -14,8 +14,9 @@ final class ChannelPipeline {
     private let onSpeaking: (Bool) -> Void
     private var reportedSpeaking = false
 
+    private let segmenterConfig: SpeechSegmenter.Config
     private let lock = NSLock()
-    private var segmenter = SpeechSegmenter()
+    private var segmenter: SpeechSegmenter
     /// Kanalın ilk örneğinin toplantı saatindeki yeri (sn)
     private var offset: Double?
     private var lastArrival: Date?
@@ -26,12 +27,15 @@ final class ChannelPipeline {
     ///   - onLevel: 0...1 arası anlık seviye, saniyede en çok ~12 kez
     ///   - onSpeaking: kanalda konuşma başladığında true, parça kapandığında false
     init(speaker: Speaker, meetingStart: Date, fixedOffset: Double? = nil,
+         segmenterConfig: SpeechSegmenter.Config = SpeechSegmenter.Config(),
          onSegment: @escaping (Speaker, Double, [Float]) -> Void,
          onLevel: @escaping (Float) -> Void,
          onSpeaking: @escaping (Bool) -> Void) {
         self.speaker = speaker
         self.meetingStart = meetingStart
         self.fixedOffset = fixedOffset
+        self.segmenterConfig = segmenterConfig
+        self.segmenter = SpeechSegmenter(config: segmenterConfig)
         self.onSegment = onSegment
         self.onLevel = onLevel
         self.onSpeaking = onSpeaking
@@ -49,7 +53,7 @@ final class ChannelPipeline {
             if let segment = segmenter.flush(), let offset {
                 finished.append((offset + segment.startTime, segment.samples))
             }
-            segmenter = SpeechSegmenter()
+            segmenter = SpeechSegmenter(config: segmenterConfig)
             offset = nil
         }
         lastArrival = now
@@ -83,7 +87,7 @@ final class ChannelPipeline {
         if let segment = segmenter.flush(), let offset {
             finished = (offset + segment.startTime, segment.samples)
         }
-        segmenter = SpeechSegmenter()
+        segmenter = SpeechSegmenter(config: segmenterConfig)
         offset = nil
         lastArrival = nil
         let wasSpeaking = reportedSpeaking
