@@ -14,14 +14,17 @@ enum HallucinationFilter {
     ]
 
     static func isHallucination(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Yalnız noktalama, müzik işareti ya da "[Müzik]" gibi köşeli/yuvarlak parantezli etiket
-        let stripped = trimmed
-            .replacingOccurrences(of: #"[\[\(][^\]\)]*[\]\)]"#, with: "", options: .regularExpression)
-        if !stripped.unicodeScalars.contains(where: { CharacterSet.alphanumerics.contains($0) }) {
-            return true
-        }
-        let lowered = trimmed.lowercased(with: Locale(identifier: "tr_TR"))
+        if isNonSpeechTag(text) { return true }
+        let lowered = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(with: Locale(identifier: "tr_TR"))
         return prefixes.contains { lowered.hasPrefix($0) }
+    }
+
+    /// Metin yalnız noktalama, müzik işareti ya da "[Müzik]" gibi köşeli/yuvarlak parantezli
+    /// bir etiketten mi ibaret?
+    static func isNonSpeechTag(_ text: String) -> Bool {
+        let stripped = text
+            .replacingOccurrences(of: #"[\[\(][^\]\)]*[\]\)]"#, with: "", options: .regularExpression)
+        return !stripped.unicodeScalars.contains(where: { CharacterSet.alphanumerics.contains($0) })
     }
 }

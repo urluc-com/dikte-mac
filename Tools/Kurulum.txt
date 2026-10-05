@@ -1,0 +1,46 @@
+DİKTE — KURULUM
+
+Gerekenler
+  • macOS 14.4 (Sonoma) ya da daha yenisi. Daha eski bir macOS'te uygulama açılmaz.
+  • Apple Silicon ya da Intel Mac (uygulama ikisini de içerir).
+  • İlk açılışta modeli indirmek için internet.
+
+Kurulum
+  1. Dikte'yi yandaki Applications (Uygulamalar) klasörüne sürükle.
+  2. Uygulamalar'dan Dikte'yi aç.
+  3. macOS "Apple bu uygulamayı doğrulayamadı" diye engellerse (uygulama kişisel
+     kullanım için derlendi, Apple'a onaylatılmadı):
+       Sistem Ayarları > Gizlilik ve Güvenlik > aşağıdaki "Dikte engellendi"
+       satırında "Yine de Aç".
+     Ya da Terminal'de tek satır:
+       xattr -dr com.apple.quarantine /Applications/Dikte.app
+  4. Açılan kurulum penceresindeki izinleri ver: Mikrofon, Erişilebilirlik,
+     Giriş İzleme, Sistem sesi.
+  5. "Başla"ya bas. Konuşma tanıma modeli iner ve bir kez hazırlanır
+     (Apple Silicon: yaklaşık 1,6 GB, Intel: yaklaşık 0,5 GB). Menü çubuğundaki
+     mikrofon simgesinde ilerleme görünür.
+
+Kullanım
+  • Dikte: Sağ Option (⌥) tuşunu basılı tut, konuş, bırak; metin imlecin olduğu
+    yere yazılır.
+  • Toplantı: menü çubuğundaki mikrofon simgesi > "Toplantıyı başlat". Dikte
+    mikrofonunu ("Ben") ve Mac'te çalan sesi ("Karşı taraf") dinleyip yazıya
+    döker. Bitince "Toplantıyı bitir ve özetle".
+  • Kayıtlar: ~/Library/Application Support/Dikte/Toplantilar
+
+Toplantı özeti
+  Özet, bu bilgisayarda çalışan Ollama'yı kullanır (Ayarlar > Ollama > Model).
+  Ollama kurulu değilse döküm yine alınır, yalnız özet çıkmaz; bu durumda
+  Ayarlar'dan "Toplantı bitince özet çıkar"ı kapatabilirsin.
+
+Intel Mac
+  Intel'de Neural Engine olmadığı için model işlemcide çalışır. Uygulama orada
+  varsayılan olarak küçük modeli (Small) seçer: canlı konuşmaya yetişir ama
+  büyük modele göre daha çok kelime hatası yapar. Ayarlar > Model'den Medium
+  ya da Large v3 Turbo seçilebilir; daha doğru yazarlar ama satırlar gecikir.
+
+Sorun çıkarsa
+  • Günlük: ~/Library/Logs/Dikte/dikte.log
+  • Uygulama hiç açılmıyorsa Terminal'de:
+      codesign --force --deep --sign - /Applications/Dikte.app
+    (uygulamayı o bilgisayarda yeniden imzalar; ardından izinleri yeniden vermek gerekir)

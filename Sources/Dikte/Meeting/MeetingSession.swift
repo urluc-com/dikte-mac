@@ -284,10 +284,10 @@ final class MeetingSession: ObservableObject {
             let started = Date()
             let output = try await transcription.transcribeDetailed(item.samples, language: settings.language.whisperCode)
             let text = output.text
-            Log.write(String(format: "Parça: %@ %@ · %.1f sn ses → %.1f sn'de yazıldı (%d karakter%@)",
+            Log.write(String(format: "Parça: %@ %@ · %.1f sn ses → %.1f sn'de yazıldı (%d karakter, güven %.2f%@)",
                              item.speaker.label, Meeting.clock(item.start),
                              Double(item.samples.count) / SpeechSegmenter.sampleRate,
-                             Date().timeIntervalSince(started), text.count,
+                             Date().timeIntervalSince(started), text.count, output.avgLogprob,
                              output.temperature > 0 ? String(format: ", yedek tur %.1f", output.temperature) : ""))
             guard !text.isEmpty, !HallucinationFilter.isHallucination(text) else { return }
             // Whisper'ın kendi "konuşma yok" ölçütü: ses var ama söz değil (müzik, gürültü)

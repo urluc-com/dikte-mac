@@ -24,8 +24,12 @@ final class TranscriptionService: ObservableObject {
     }
 
     @Published private(set) var state: State = .idle
+    /// Test: modeli yalnız işlemcide çalıştır (Neural Engine'siz bir Mac'in hızını kestirmek için)
+    var cpuOnly = false
     private var whisper: WhisperKit?
     private var loadedModel: String?
+    /// "[", "(", "♪" gibi konuşma dışı etiketleri başlatan belirteçler
+    private var nonSpeechTokens: [Int] = []
 
     var isReady: Bool { state == .ready }
 
@@ -55,6 +59,9 @@ final class TranscriptionService: ObservableObject {
                 downloadBase: base,
                 modelFolder: folder.path,
                 tokenizerFolder: base,
+                computeOptions: cpuOnly
+                    ? ModelComputeOptions(melCompute: .cpuOnly, audioEncoderCompute: .cpuOnly, textDecoderCompute: .cpuOnly)
+                    : nil,
                 verbose: false,
                 logLevel: .error,
                 prewarm: false,
@@ -70,6 +77,7 @@ final class TranscriptionService: ObservableObject {
 
             whisper = pipe
             loadedModel = model
+            nonSpeechTokens = Self.nonSpeechTokens(of: pipe.tokenizer)
             state = .ready
             Log.write(String(format: "Model hazır: %@ (hazırlık %.1f sn, yükleme %.1f sn)",
                              model, prepared.timeIntervalSince(started), Date().timeIntervalSince(prepared)))
@@ -85,7 +93,24 @@ final class TranscriptionService: ObservableObject {
     }
 
     /// `language` nil ise dil sesten algılanır.
+    ///
+    /// Küçük modeller net konuşmayı bile bazen "[Müzik]" diye etiketliyor (WhisperKit, özgün
+    /// Whisper'ın aksine bu belirteçleri kendiliğinden yasaklamıyor). Sonuç yalnız böyle bir
+    /// etiketse parça bir kez de o belirteçler yasakken çözülür; model bu kez de emin değilse
+    /// (düşük güven) ilk sonuç kalır ve çağıran onu "söz yok" diye eler.
     func transcribeDetailed(_ samples: [Float], language: String?) async throws -> Output {
+        let first = try await decode(samples, language: language, suppressing: [])
+        guard !first.text.isEmpty, HallucinationFilter.isNonSpeechTag(first.text), !nonSpeechTokens.isEmpty else {
+            return first
+        }
+        let retry = try await decode(samples, language: language, suppressing: nonSpeechTokens)
+        let accepted = retry.avgLogprob > -1 && !retry.text.isEmpty && !HallucinationFilter.isHallucination(retry.text)
+        Log.write(String(format: "Etiket çıktı (%@); etiketsiz yeniden çözüldü, güven %.2f → %@",
+                         first.text, retry.avgLogprob, accepted ? "kabul" : "ret"))
+        return accepted ? retry : first
+    }
+
+    private func decode(_ samples: [Float], language: String?, suppressing suppressed: [Int]) async throws -> Output {
         guard let whisper else {
             throw NSError(domain: "Dikte", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Model henüz hazır değil."])
@@ -99,9 +124,11 @@ final class TranscriptionService: ObservableObject {
             detectLanguage: language == nil,
             skipSpecialTokens: true,
             withoutTimestamps: true,
+            suppressTokens: suppressed,
             // WhisperKit ilk kelimeden emin olamazsa parçayı baştan, rastgele örneklemeyle
             // çözüyor; cümle ortasından başlayan parçalarda bu sık tetikleniyor ve yazımı
-            // bozuyor ("Önceki" → "Langeki"). Tekrar ve düşük güven denetimleri duruyor.
+            // bozuyor (duraksamasız konuşma testinde karakter hatası %3,5 → %1,0).
+            // Tekrar ve düşük güven denetimleri duruyor.
             firstTokenLogProbThreshold: nil
         )
         let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options)
@@ -117,6 +144,19 @@ final class TranscriptionService: ObservableObject {
             noSpeechProb: segments.map(\.noSpeechProb).max() ?? 0,
             temperature: segments.map(\.temperature).max() ?? 0
         )
+    }
+
+    private static func nonSpeechTokens(of tokenizer: WhisperTokenizer?) -> [Int] {
+        guard let tokenizer else { return [] }
+        let specialBegin = tokenizer.specialTokens.specialTokenBegin
+        var ids = Set<Int>()
+        for symbol in ["[", "(", "♪", "*", "【", "（"] {
+            for text in [symbol, " " + symbol] {
+                let tokens = tokenizer.encode(text: text).filter { $0 < specialBegin }
+                if tokens.count == 1 { ids.insert(tokens[0]) }
+            }
+        }
+        return ids.sorted()
     }
 
     // MARK: - Model klasörü

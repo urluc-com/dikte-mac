@@ -20,6 +20,8 @@ import SwiftUI
 ///     DIKTE_TEST_TAP=<sn>         yalnız sistem sesi yakalamayı dene: bu kadar saniye dinle, gelen
 ///                                 parça sayısını ve seviyeyi yaz, sesi tap.wav'a kaydet
 ///     DIKTE_TEST_GORUNUM=<adlar>  yalnız pencere görüntüsü al: "ayarlar", "kurulum" (virgülle)
+///     DIKTE_TEST_MODEL=<ad>       ayardaki yerine bu Whisper modelini kullan (ör. openai_whisper-small)
+///     DIKTE_TEST_ISLEMCI=1        modeli yalnız işlemcide çalıştır (Neural Engine'siz Mac kestirimi)
 ///     DIKTE_TEST_OZET=1           özet de çıkar
 ///     DIKTE_TEST_PENCERE=1        toplantı penceresini aç, görüntüsünü al
 struct TestHarness {
@@ -60,7 +62,15 @@ struct TestHarness {
     func run(transcription: TranscriptionService, session: MeetingSession, store: MeetingStore,
              window: MeetingWindowController, model: String) {
         Task { @MainActor in
-            var report: [String: Any] = ["model": model]
+            let env = ProcessInfo.processInfo.environment
+            let model = env["DIKTE_TEST_MODEL"] ?? model
+            transcription.cpuOnly = env["DIKTE_TEST_ISLEMCI"] == "1"
+            var report: [String: Any] = ["model": model, "yalnizIslemci": transcription.cpuOnly]
+            #if arch(x86_64)
+            report["mimari"] = "x86_64"
+            #else
+            report["mimari"] = "arm64"
+            #endif
             try? FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
 
             if !staticViews.isEmpty {
