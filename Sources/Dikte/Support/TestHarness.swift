@@ -17,8 +17,9 @@ import SwiftUI
 ///     DIKTE_TEST_CANLI=<sn>       canlı kip: bu kadar saniye dinle
 ///     DIKTE_TEST_DOKUM=<json>     ses yerine hazır döküm yükle (yalnız özeti sınamak için);
 ///                                 [{"konusmaci": "Ben"|"Karşı taraf", "baslangic", "bitis", "metin"}]
-///     DIKTE_TEST_TAP=<sn>         yalnız sistem sesi yakalamayı dene: bu kadar saniye dinle, gelen
-///                                 parça sayısını ve seviyeyi yaz, sesi tap.wav'a kaydet
+///     DIKTE_TEST_TAP=<sn>         yalnız yakalamayı dene: sistem sesini (ve izni varsa mikrofonu) bu
+///                                 kadar saniye dinle, gelen örnek sayısını ve seviyeyi yaz, sesleri
+///                                 tap.wav ve mik.wav'a kaydet
 ///     DIKTE_TEST_GORUNUM=<adlar>  yalnız pencere görüntüsü al: "ayarlar", "kurulum" (virgülle)
 ///     DIKTE_TEST_MODEL=<ad>       ayardaki yerine bu Whisper modelini kullan (ör. openai_whisper-small)
 ///     DIKTE_TEST_ISLEMCI=1        modeli yalnız işlemcide çalıştır (Neural Engine'siz Mac kestirimi)
@@ -199,7 +200,27 @@ struct TestHarness {
                 tally.lock.lock(); tally.started = false; tally.error = error.localizedDescription; tally.lock.unlock()
             }
         }
+
+        // Mikrofon: izin zaten verilmişse toplantıdaki akış yoluyla dinle (burada izin istenmez)
+        let micTally = Tally()
+        let mic = AudioEngine()
+        var micError: String?
+        let micAuthorized = AudioEngine.microphoneAuthorized
+        if micAuthorized {
+            do {
+                try mic.startStreaming { chunk in
+                    micTally.lock.lock()
+                    micTally.chunks += 1
+                    micTally.samples.append(contentsOf: chunk)
+                    micTally.lock.unlock()
+                }
+            } catch {
+                micError = error.localizedDescription
+            }
+        }
+
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))
+        mic.stopStreaming()
 
         let (started, chunks, samples, error) = tally.lock.withLock {
             (tally.started, tally.chunks, tally.samples, tally.error)
@@ -218,18 +239,32 @@ struct TestHarness {
             "tepe": Double(samples.map { abs($0) }.max() ?? 0)
         ]
         if let error { report["hata"] = error }
-        if !samples.isEmpty,
-           let file = try? AVAudioFile(forWriting: outputURL.appendingPathComponent("tap.wav"),
-                                       settings: Resampler16k.targetFormat.settings),
-           let buffer = AVAudioPCMBuffer(pcmFormat: Resampler16k.targetFormat,
-                                         frameCapacity: AVAudioFrameCount(samples.count)) {
-            buffer.frameLength = AVAudioFrameCount(samples.count)
-            samples.withUnsafeBufferPointer { source in
-                buffer.floatChannelData![0].update(from: source.baseAddress!, count: samples.count)
-            }
-            try? file.write(from: buffer)
-        }
+        writeWAV(samples, named: "tap.wav")
+
+        let micSamples = micTally.lock.withLock { micTally.samples }
+        report["mikrofonIzni"] = micAuthorized
+        report["mikOrnekSayisi"] = micSamples.count
+        report["mikTepe"] = Double(micSamples.map { abs($0) }.max() ?? 0)
+        report["mikRMS"] = micSamples.isEmpty
+            ? 0 : Double(sqrt(micSamples.reduce(0) { $0 + $1 * $1 } / Float(micSamples.count)))
+        if let micError { report["mikHata"] = micError }
+        writeWAV(micSamples, named: "mik.wav")
+
         finish(report, code: started == true ? 0 : 1)
+    }
+
+    private func writeWAV(_ samples: [Float], named name: String) {
+        guard !samples.isEmpty,
+              let file = try? AVAudioFile(forWriting: outputURL.appendingPathComponent(name),
+                                          settings: Resampler16k.targetFormat.settings),
+              let buffer = AVAudioPCMBuffer(pcmFormat: Resampler16k.targetFormat,
+                                            frameCapacity: AVAudioFrameCount(samples.count))
+        else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { source in
+            buffer.floatChannelData![0].update(from: source.baseAddress!, count: samples.count)
+        }
+        try? file.write(from: buffer)
     }
 
     /// Ayarlar ve kurulum pencerelerini arka planda açıp görüntülerini yazar.
