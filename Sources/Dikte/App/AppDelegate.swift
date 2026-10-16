@@ -67,6 +67,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkey.start()
 
+        // 16 Eki 2026: URLuc Dash'in mikrofon düğmesi — dağıtık bildirimle kayıt başlat/bitir (metin, kısayoldaki gibi
+        // odaktaki kutuya yapıştırılır). Bildirim: com.urluc.dikte.kayit, userInfo["eylem"] = "basla" | "bitir" | "degistir".
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.urluc.dikte.kayit"), object: nil,
+                                                            queue: .main) { [weak self] n in
+            guard let self else { return }
+            let eylem = (n.userInfo?["eylem"] as? String) ?? "degistir"
+            Task { @MainActor in
+                switch eylem {
+                case "basla": self.beginRecording()
+                case "bitir": self.endRecordingAndTranscribe()
+                default: self.audioEngine.isRecording ? self.endRecordingAndTranscribe() : self.beginRecording()
+                }
+            }
+        }
+
         if settings.onboardingDone {
             Task { await transcription.load(model: settings.model.rawValue) }
         } else {
